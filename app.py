@@ -1,7 +1,6 @@
-
 import os
 import re
-import pickle
+import joblib
 import numpy as np
 import streamlit as st
 
@@ -28,19 +27,8 @@ st.set_page_config(
 
 @st.cache_resource
 def load_ml_model():
-
-    with open(
-        "models/tfidf_vectorizer.pkl",
-        "rb"
-    ) as f:
-        vectorizer = pickle.load(f)
-
-    with open(
-        "models/resume_classifier.pkl",
-        "rb"
-    ) as f:
-        model = pickle.load(f)
-
+    vectorizer = joblib.load("models/tfidf_vectorizer.pkl")
+    model = joblib.load("models/resume_classifier.pkl")
     return vectorizer, model
 
 
@@ -50,10 +38,7 @@ def load_ml_model():
 
 @st.cache_resource
 def load_sentence_model():
-
-    return SentenceTransformer(
-        "all-MiniLM-L6-v2"
-    )
+    return SentenceTransformer("all-MiniLM-L6-v2")
 
 
 # ============================================================
@@ -61,21 +46,9 @@ def load_sentence_model():
 # ============================================================
 
 def clean_text(text):
-
     text = str(text).lower()
-
-    text = re.sub(
-        r"[^a-zA-Z0-9\s]",
-        " ",
-        text
-    )
-
-    text = re.sub(
-        r"\s+",
-        " ",
-        text
-    )
-
+    text = re.sub(r"[^a-zA-Z0-9\s]", " ", text)
+    text = re.sub(r"\s+", " ", text)
     return text.strip()
 
 
@@ -84,18 +57,12 @@ def clean_text(text):
 # ============================================================
 
 def extract_resume_text(uploaded_file):
-
     reader = PdfReader(uploaded_file)
-
     text = ""
-
     for page in reader.pages:
-
         page_text = page.extract_text()
-
         if page_text:
             text += page_text + "\n"
-
     return text
 
 
@@ -103,28 +70,13 @@ def extract_resume_text(uploaded_file):
 # SEMANTIC MATCH
 # ============================================================
 
-def calculate_semantic_match(
-    resume_text,
-    job_description
-):
-
+def calculate_semantic_match(resume_text, job_description):
     model = load_sentence_model()
 
-    resume_embedding = model.encode(
-        resume_text,
-        convert_to_numpy=True
-    )
+    resume_embedding = model.encode(resume_text, convert_to_numpy=True)
+    job_embedding = model.encode(job_description, convert_to_numpy=True)
 
-    job_embedding = model.encode(
-        job_description,
-        convert_to_numpy=True
-    )
-
-    score = cosine_similarity(
-        [resume_embedding],
-        [job_embedding]
-    )[0][0]
-
+    score = cosine_similarity([resume_embedding], [job_embedding])[0][0]
     score = max(0, min(1, score))
 
     return round(score * 100, 2)
@@ -135,49 +87,15 @@ def calculate_semantic_match(
 # ============================================================
 
 SKILLS = [
-    "python",
-    "java",
-    "javascript",
-    "typescript",
-    "c++",
-    "sql",
-    "mysql",
-    "mongodb",
-    "pandas",
-    "numpy",
-    "scikit-learn",
-    "machine learning",
-    "deep learning",
-    "generative ai",
-    "natural language processing",
-    "computer vision",
-    "transformers",
-    "llm",
-    "large language models",
-    "prompt engineering",
-    "tensorflow",
-    "pytorch",
-    "cnn",
-    "lstm",
-    "rnn",
-    "git",
-    "github",
-    "streamlit",
-    "rest apis",
-    "html",
-    "css",
-    "react",
-    "node.js",
-    "flask",
-    "docker",
-    "tableau",
-    "data analysis",
-    "data science",
-    "anomaly detection",
-    "feature engineering",
-    "classification",
-    "regression",
-    "clustering"
+    "python", "java", "javascript", "typescript", "c++", "sql", "mysql",
+    "mongodb", "pandas", "numpy", "scikit-learn", "machine learning",
+    "deep learning", "generative ai", "natural language processing",
+    "computer vision", "transformers", "llm", "large language models",
+    "prompt engineering", "tensorflow", "pytorch", "cnn", "lstm", "rnn",
+    "git", "github", "streamlit", "rest apis", "html", "css", "react",
+    "node.js", "flask", "docker", "tableau", "data analysis",
+    "data science", "anomaly detection", "feature engineering",
+    "classification", "regression", "clustering"
 ]
 
 
@@ -186,17 +104,11 @@ SKILLS = [
 # ============================================================
 
 def extract_skills(text):
-
     text = text.lower()
-
     detected = []
-
     for skill in SKILLS:
-
         if skill.lower() in text:
-
             detected.append(skill)
-
     return sorted(set(detected))
 
 
@@ -204,47 +116,19 @@ def extract_skills(text):
 # SKILL MATCH
 # ============================================================
 
-def calculate_skill_match(
-    resume_text,
-    job_description
-):
+def calculate_skill_match(resume_text, job_description):
+    resume_skills = extract_skills(resume_text)
+    job_skills = extract_skills(job_description)
 
-    resume_skills = extract_skills(
-        resume_text
-    )
-
-    job_skills = extract_skills(
-        job_description
-    )
-
-    matched = [
-        skill
-        for skill in job_skills
-        if skill in resume_skills
-    ]
-
-    missing = [
-        skill
-        for skill in job_skills
-        if skill not in resume_skills
-    ]
+    matched = [skill for skill in job_skills if skill in resume_skills]
+    missing = [skill for skill in job_skills if skill not in resume_skills]
 
     if len(job_skills) == 0:
-
         skill_score = 0.0
-
     else:
+        skill_score = (len(matched) / len(job_skills)) * 100
 
-        skill_score = (
-            len(matched) /
-            len(job_skills)
-        ) * 100
-
-    return (
-        matched,
-        missing,
-        round(skill_score, 2)
-    )
+    return matched, missing, round(skill_score, 2)
 
 
 # ============================================================
@@ -260,21 +144,15 @@ def generate_gemini_feedback(
     missing_skills,
     predicted_category
 ):
-
-    api_key = os.getenv(
-        "GEMINI_API_KEY"
-    )
+    api_key = os.getenv("GEMINI_API_KEY")
 
     if not api_key:
-
         return (
             "Gemini API key is not configured. "
             "Please add GEMINI_API_KEY in Streamlit secrets."
         )
 
-    client = genai.Client(
-        api_key=api_key
-    )
+    client = genai.Client(api_key=api_key)
 
     prompt = f"""
 You are an expert AI/ML career and resume analyst.
@@ -297,10 +175,10 @@ Missing Skills:
 {", ".join(missing_skills)}
 
 RESUME:
-{resume_text}
+{resume_text[:12000]}
 
 JOB DESCRIPTION:
-{job_description}
+{job_description[:8000]}
 
 Give professional and realistic feedback.
 
@@ -315,12 +193,14 @@ Use exactly these sections:
 Do not invent experience or skills that are not present.
 """
 
-    response = client.models.generate_content(
-        model="gemini-3.6-flash",
-        contents=prompt
-    )
-
-    return response.text
+    try:
+        response = client.models.generate_content(
+            model="gemini-3.6-flash",
+            contents=prompt
+        )
+        return response.text
+    except Exception as e:
+        return f"Could not generate AI feedback right now. ({e})"
 
 
 # ============================================================
@@ -341,135 +221,59 @@ st.write(
 
 col1, col2 = st.columns(2)
 
-
 with col1:
-
     st.subheader("📄 Upload Resume")
-
-    uploaded_file = st.file_uploader(
-        "Upload your resume PDF",
-        type=["pdf"]
-    )
-
+    uploaded_file = st.file_uploader("Upload your resume PDF", type=["pdf"])
 
 with col2:
-
     st.subheader("📝 Job Description")
-
-    job_description = st.text_area(
-        "Paste the complete job description",
-        height=250
-    )
+    job_description = st.text_area("Paste the complete job description", height=250)
 
 
 # ============================================================
 # ANALYZE
 # ============================================================
 
-if st.button(
-    "🚀 Analyze Resume",
-    type="primary",
-    use_container_width=True
-):
+if st.button("🚀 Analyze Resume", type="primary", use_container_width=True):
 
     if uploaded_file is None:
-
-        st.error(
-            "Please upload your resume PDF."
-        )
-
+        st.error("Please upload your resume PDF.")
         st.stop()
-
 
     if not job_description.strip():
-
-        st.error(
-            "Please enter the job description."
-        )
-
+        st.error("Please enter the job description.")
         st.stop()
 
+    with st.spinner("Analyzing your resume..."):
 
-    with st.spinner(
-        "Analyzing your resume..."
-    ):
-
-        # Extract PDF
-        resume_text = extract_resume_text(
-            uploaded_file
-        )
+        resume_text = extract_resume_text(uploaded_file)
 
         if not resume_text.strip():
-
-            st.error(
-                "Could not extract text from the PDF."
-            )
-
+            st.error("Could not extract text from the PDF.")
             st.stop()
 
-
-        # ML prediction
         vectorizer, ml_model = load_ml_model()
+        cleaned_resume = clean_text(resume_text)
+        resume_vector = vectorizer.transform([cleaned_resume])
+        predicted_category = ml_model.predict(resume_vector)[0]
 
-        cleaned_resume = clean_text(
-            resume_text
+        semantic_score = calculate_semantic_match(resume_text, job_description)
+
+        matched_skills, missing_skills, skill_score = calculate_skill_match(
+            resume_text, job_description
         )
 
-        resume_vector = vectorizer.transform(
-            [cleaned_resume]
-        )
+        overall_score = round((semantic_score * 0.50) + (skill_score * 0.50), 2)
 
-        predicted_category = ml_model.predict(
-            resume_vector
-        )[0]
-
-
-        # Semantic score
-        semantic_score = calculate_semantic_match(
-            resume_text,
-            job_description
-        )
-
-
-        # Skill score
-        (
-            matched_skills,
-            missing_skills,
-            skill_score
-        ) = calculate_skill_match(
-            resume_text,
-            job_description
-        )
-
-
-        # Overall score
-        overall_score = round(
-            (semantic_score * 0.50)
-            +
-            (skill_score * 0.50),
-            2
-        )
-
-
-        # Match level
         if overall_score >= 85:
-
             match_level = "Excellent Match"
-
         elif overall_score >= 70:
-
             match_level = "Good Match"
-
         elif overall_score >= 50:
-
             match_level = "Moderate Match"
-
         else:
-
             match_level = "Low Match"
 
-
-        # Gemini
         ai_feedback = generate_gemini_feedback(
             resume_text=resume_text,
             job_description=job_description,
@@ -480,141 +284,45 @@ if st.button(
             predicted_category=predicted_category
         )
 
-
-    # ========================================================
-    # RESULTS
-    # ========================================================
-
-    st.success(
-        "✅ Resume analysis completed!"
-    )
-
-
+    st.success("✅ Resume analysis completed!")
     st.divider()
-
     st.subheader("📊 Analysis Results")
 
-
     c1, c2, c3, c4 = st.columns(4)
-
-
     with c1:
-
-        st.metric(
-            "Predicted Category",
-            predicted_category
-        )
-
-
+        st.metric("Predicted Category", predicted_category)
     with c2:
-
-        st.metric(
-            "Semantic Match",
-            f"{semantic_score}%"
-        )
-
-
+        st.metric("Semantic Match", f"{semantic_score}%")
     with c3:
-
-        st.metric(
-            "Skill Match",
-            f"{skill_score}%"
-        )
-
-
+        st.metric("Skill Match", f"{skill_score}%")
     with c4:
+        st.metric("Overall Match", f"{overall_score}%")
 
-        st.metric(
-            "Overall Match",
-            f"{overall_score}%"
-        )
-
-
-    st.subheader(
-        f"🎯 Match Level: {match_level}"
-    )
-
-
-    # ========================================================
-    # SKILLS
-    # ========================================================
+    st.subheader(f"🎯 Match Level: {match_level}")
 
     col1, col2 = st.columns(2)
-
-
     with col1:
-
         st.subheader("✅ Matched Skills")
-
         if matched_skills:
-
             for skill in matched_skills:
-
-                st.write(
-                    f"✓ {skill}"
-                )
-
+                st.write(f"✓ {skill}")
         else:
-
-            st.write(
-                "No matched skills found."
-            )
-
+            st.write("No matched skills found.")
 
     with col2:
-
         st.subheader("⚠️ Missing Skills")
-
         if missing_skills:
-
             for skill in missing_skills:
-
-                st.write(
-                    f"• {skill}"
-                )
-
+                st.write(f"• {skill}")
         else:
-
-            st.write(
-                "No major missing skills found."
-            )
-
-
-    # ========================================================
-    # GEMINI FEEDBACK
-    # ========================================================
+            st.write("No major missing skills found.")
 
     st.divider()
+    st.subheader("🤖 Generative AI Feedback")
+    st.markdown(ai_feedback)
 
-    st.subheader(
-        "🤖 Generative AI Feedback"
-    )
-
-    st.markdown(
-        ai_feedback
-    )
-
-
-    # ========================================================
-    # RESUME PREVIEW
-    # ========================================================
-
-    with st.expander(
-        "📄 View Extracted Resume Text"
-    ):
-
-        st.text(
-            resume_text
-        )
-
-
-# ============================================================
-# FOOTER
-# ============================================================
+    with st.expander("📄 View Extracted Resume Text"):
+        st.text(resume_text)
 
 st.divider()
-
-st.caption(
-    "AI Resume–Job Matcher | "
-    "Machine Learning • Deep Learning • Generative AI"
-)
+st.caption("AI Resume–Job Matcher | Machine Learning • Deep Learning • Generative AI")
